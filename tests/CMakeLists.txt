@@ -1,0 +1,15 @@
+add_library(test_common INTERFACE)
+target_include_directories(test_common INTERFACE test_common)
+
+function(register_test test_name source)
+  set(test_lib_name ${test_name}_lib)
+  add_library(${test_lib_name} ${source})
+  target_link_libraries(${test_lib_name} PRIVATE templeano test_common)
+  add_test(NAME ${test_name} COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target ${test_lib_name})
+  set_target_properties(${test_lib_name} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+
+register_test(PeanoBasicOps test_peano_basic_arith_ops.cpp)
+register_test(PeanoPrimeFacto test_peano_prime_fact.cpp)
+register_test(PositionalEncoding test_positional_encoding.cpp)
+register_test(ValueHelper test_value_helper.cpp)

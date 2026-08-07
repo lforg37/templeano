@@ -1,0 +1,2 @@
+add_library(templeano INTERFACE)
+target_include_directories(templeano INTERFACE include)
