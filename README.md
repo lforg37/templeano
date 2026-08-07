@@ -9,8 +9,8 @@ electricity by reading it please :-).
 
 ## What does that thing do
 
-This is an attempt to teach the C++ compiler how to compute without using
-any native arithmetic type.
+This is an attempt to teach the C++ compiler
+how to compute without using any native arithmetic type.
 
 
 Basically, you're able to define your encoding and do some `constexpr` maths.
