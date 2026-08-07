@@ -47,7 +47,8 @@ constexpr auto decimal_236 =
 constexpr auto decimal_764 =
     usual_decimal.decode(L"764"_digits);
 // Support for arithmetic ops (only addition at the moment
-// in positional encoding, 4 base operation on radix-1)
+// in positional encoding, 4 base operation and prime factor decomposition
+// on radix-1)
 constexpr auto sum_236_764 = decimal_236 + classical_decimal_764;
 
 // we can check the result
