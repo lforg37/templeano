@@ -163,7 +163,11 @@ constexpr auto operator/(L, R) {
   if constexpr (is_lower_v<L, R>) {
     return Zero{};
   } else {
-    return One{} + ((L{} - R{}) / R{});
+    // Be careful to keep the bigger term on the
+    // left in the addition as the template
+    // "destacks" the successors from right
+    // to stack on the left
+    return ((L{} - R{}) / R{}) + One{};
   }
 }
 
