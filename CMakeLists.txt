@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0.0)
+cmake_minimum_required(VERSION 3.22.0)
 project(Templeano VERSION 0.0.1 LANGUAGES CXX)
 
 # Enforce strict C++20 standard compliance
