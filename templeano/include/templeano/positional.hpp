@@ -3,6 +3,7 @@
 
 #include "templeano/peano.hpp"
 #include "templeano/utils.hpp"
+#include <type_traits>
 namespace templeano {
 
 namespace detail {
@@ -36,13 +37,9 @@ private:
   using DigitSequence = utils::Seq<Digits...>;
   template <typename T> struct GetHeadHelper;
 
-  template <typename Head, typename... Rest>
-  struct GetHeadHelper<DigitSequence<Head, Rest...>> {
-    using type = Head;
-  };
-
-  template <> struct GetHeadHelper<DigitSequence<>> {
-    using type = Zero;
+  template <typename... Digits> struct GetHeadHelper<DigitSequence<Digits...>> {
+    using type =
+        typename DigitSequence<Digits...>::template head_type_or_t<Zero>;
   };
 
   template <typename T> using lsb_t = typename GetHeadHelper<T>::type;
@@ -280,17 +277,27 @@ private:
     return {};
   }
 
+  template <wchar_t Symbol>
+  using value_pair_for_symbol =
+      HolderType::template get_type_with_property<detail::GetOnSym<Symbol>>;
+
 public:
   template <PeanoInteger PI>
   static constexpr wchar_t symbol_for_value =
       mapping_holder.get_for_predicate(detail::GetOnValue<PI>{}).symbol;
 
   template <wchar_t Symbol>
-  using value_for_symbol = HolderType::template get_type_with_property<
-      detail::GetOnSym<Symbol>>::Digit;
+  using value_for_symbol = std::conditional_t<
+      std::is_same_v<value_pair_for_symbol<Symbol>, utils::not_found_t>,
+      utils::not_found_t, typename value_pair_for_symbol<Symbol>::Digit>;
 
+  template <wchar_t Symbol>
+  static constexpr bool is_valid_symbol =
+      !std::is_same_v<value_for_symbol<Symbol>, utils::not_found_t>;
   // TODO: Add proper check that symbol is valid
+
   template <wchar_t... Digits>
+    requires((is_valid_symbol<Digits> && ...))
   static constexpr auto decode(detail::CharSeq<Digits...> digits) {
     return encoding_from_seq(decode_impl(digits));
   }
