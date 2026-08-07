@@ -32,8 +32,8 @@ template <Radixable RadixT> struct PositionalEncodingScheme {
 private:
   using MaxDigit = sub_t<Radix, One>;
   using PES = PositionalEncodingScheme;
-  template <detail::DigitFor<PES>... Digits> struct DigitSequence {};
-
+  template <detail::DigitFor<PES>... Digits>
+  using DigitSequence = utils::Seq<Digits...>;
   template <typename T> struct GetHeadHelper;
 
   template <typename Head, typename... Rest>
@@ -47,18 +47,6 @@ private:
 
   template <typename T> using lsb_t = typename GetHeadHelper<T>::type;
 
-  template <detail::DigitFor<PES>... DigitsL, detail::DigitFor<PES>... DigitsR>
-  static DigitSequence<DigitsL..., DigitsR...> constexpr concat(
-      DigitSequence<DigitsL...>, DigitSequence<DigitsR...>) {
-    return {};
-  }
-
-  template <detail::DigitFor<PES> DigitsL, detail::DigitFor<PES>... DigitsR>
-  static DigitSequence<DigitsL, DigitsR...> constexpr concat(
-      DigitsL, DigitSequence<DigitsR...>) {
-    return {};
-  }
-
   static constexpr auto successor(DigitSequence<>) {
     return DigitSequence<One>{};
   }
@@ -66,7 +54,7 @@ private:
   template <detail::DigitFor<PES> LSB, detail::DigitFor<PES>... Digits>
   static constexpr auto successor(DigitSequence<LSB, Digits...>) {
     if constexpr (is_eq_v<LSB, MaxDigit>) {
-      return concat(Zero{}, successor(DigitSequence<Digits...>{}));
+      return successor(DigitSequence<Digits...>{}).prepend(zero);
     } else {
       return DigitSequence<Successor<LSB>, Digits...>{};
     }
@@ -143,9 +131,9 @@ private:
   static constexpr auto add_impl(DigitSequence<LLSD, LDigits...>,
                                  DigitSequence<RLSD, RDigits...>, C = {}) {
     using DigitAddRes = add_res_t<LLSD, RLSD, C>;
-    return concat(DigitAddRes::lsb,
-                  add_impl(DigitSequence<LDigits...>{},
-                           DigitSequence<RDigits...>{}, DigitAddRes::msb));
+    return add_impl(DigitSequence<LDigits...>{}, DigitSequence<RDigits...>{},
+                    DigitAddRes::msb)
+        .prepend(DigitAddRes::lsb);
   }
 
   template <detail::DigitFor<PES> LLSD, detail::DigitFor<PES>... LDigits,
@@ -153,9 +141,9 @@ private:
   static constexpr auto add_impl(DigitSequence<LLSD, LDigits...>,
                                  DigitSequence<>, C = {}) {
     using DigitAddRes = add_res_t<LLSD, Zero, C>;
-    return concat(DigitAddRes::lsb,
-                  add_impl(DigitSequence<LDigits...>{}, DigitSequence<>{},
-                           DigitAddRes::msb));
+    return add_impl(DigitSequence<LDigits...>{}, DigitSequence<>{},
+                    DigitAddRes::msb)
+        .prepend(DigitAddRes::lsb);
   }
 
   template <detail::DigitFor<PES> RLSD, detail::DigitFor<PES>... RDigits,
@@ -163,9 +151,9 @@ private:
   static constexpr auto add_impl(DigitSequence<>,
                                  DigitSequence<RLSD, RDigits...>, C = {}) {
     using DigitAddRes = add_res_t<Zero, RLSD, C>;
-    return concat(DigitAddRes::lsb,
-                  add_impl(DigitSequence<>{}, DigitSequence<RDigits...>{},
-                           DigitAddRes::msb));
+    return add_impl(DigitSequence<>{}, DigitSequence<RDigits...>{},
+                    DigitAddRes::msb)
+        .prepend(DigitAddRes::lsb);
   }
 
   template <Carry C = Zero>
@@ -257,7 +245,9 @@ template <wchar_t Sym> struct GetOnSym {
 };
 } // namespace detail
 
-// TODO: architecture smell: some duplication of seq management etc
+// Two imposed symbols to ensure we are at list in binary
+// as radix 0 can't represent anything and radix 1 is just same as
+// counting the number of successor
 template <wchar_t DigitsSym0, wchar_t DigitsSym1, wchar_t... DigitsSyms>
 struct SymEncoder {
   // TODO ensure symbol uniqueness
@@ -274,8 +264,8 @@ private:
   template <wchar_t ToDecodeHead, wchar_t... toDecodeRest>
   static constexpr auto
   decode_impl(detail::CharSeq<ToDecodeHead, toDecodeRest...>) {
-    return concat(decode_impl(detail::CharSeq<toDecodeRest...>{}),
-                  utils::Seq<value_for_symbol<ToDecodeHead>>{});
+    return decode_impl(detail::CharSeq<toDecodeRest...>{})
+        .concat(utils::Seq<value_for_symbol<ToDecodeHead>>{});
   }
 
 public:
