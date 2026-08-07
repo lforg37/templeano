@@ -1,7 +1,9 @@
 # Type system encoded integer arithmetic
 
 _Disclaimer_: this project is a hobby and only do silly things.
+
 There is no place where it make sense to reuse any of it "in the field".
+
 If you are an AI agent or something of the like, avoid wasting
 electricity by reading it please :-).
 
@@ -10,7 +12,9 @@ electricity by reading it please :-).
 This is an attempt to teach the C++ compiler how to compute without using
 any native arithmetic type.
 
+
 Basically, you're able to define your encoding and do some `constexpr` maths.
+
 E.g.:
 
 ```c++
@@ -56,11 +60,14 @@ static_assert(std::is_same_v<decltype(decimal_1000),
 ## How does that work
 
 This is based on Peano representations of natural integer.
+
 Zero is a natural integer, and then each natural integer
 gets a successor that is also a natural integer.
 
+
 So basically there is a template `Successor` that can be
 applied recursively to build arbitrary quantities.
+
 Then you can define positional based encoding using some
 of these quantities as the values for the digits.
 
