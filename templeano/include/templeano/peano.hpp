@@ -61,7 +61,7 @@ template <NonNullPeanoInteger T> constexpr T operator+(Zero, T) { return {}; }
 
 template <NonNullPeanoInteger T> constexpr T operator+(T, Zero) { return {}; }
 
-template <typename T1, typename T2>
+template <PeanoInteger T1, PeanoInteger T2>
 constexpr auto operator+(Successor<T1>, Successor<T2>) {
   return Successor<Successor<T1>>{} + T2{};
 }
@@ -135,9 +135,15 @@ template <NonNullPeanoInteger T> constexpr Zero operator*(T, Zero) {
   return {};
 }
 
-template <typename T1, typename T2>
+template <PeanoInteger T1, PeanoInteger T2>
 constexpr auto operator*(Successor<T1>, Successor<T2>) {
-  return Successor<T2>{} + T1{} * Successor<T2>{};
+  // This is "the good order" for the addition:
+  // accumulating term stays left and addition
+  // implementation reduce the right term to add it to
+  // the left.
+  // Reverse order would move the accumulating term
+  // back and forth at each new element add.
+  return T1{} * Successor<T2>{} + Successor<T2>{};
 }
 
 template <typename L, typename R>
