@@ -60,6 +60,25 @@ public:
       std::conditional_t<Base::is_empty, Default, typename Base::Head>;
 };
 
+namespace detail {
+template <auto... Values> struct AllDistinctHelper;
+
+template <auto T> struct AllDistinctHelper<T> {
+  static constexpr bool all_unique{true};
+};
+
+template <auto HeadVal, auto... Values>
+struct AllDistinctHelper<HeadVal, Values...> {
+  static constexpr bool is_head_unique = ((HeadVal != Values) && ...);
+  static constexpr bool all_unique =
+      is_head_unique && AllDistinctHelper<Values...>::all_unique;
+};
+} // namespace detail
+
+template <auto Head, auto... Values>
+constexpr bool all_distinct =
+    detail::AllDistinctHelper<Head, Values...>::all_unique;
+
 } // namespace templeano::utils
 
 #endif // TEMPLEANO_UTILS_HPP

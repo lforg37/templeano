@@ -246,8 +246,8 @@ template <wchar_t Sym> struct GetOnSym {
 // as radix 0 can't represent anything and radix 1 is just same as
 // counting the number of successor
 template <wchar_t DigitsSym0, wchar_t DigitsSym1, wchar_t... DigitsSyms>
+  requires(utils::all_distinct<DigitsSym0, DigitsSym1, DigitsSyms...>)
 struct SymEncoder {
-  // TODO ensure symbol uniqueness
 private:
   static constexpr auto mapping_holder = detail::encode_pairs(
       Zero{}, detail::CharSeq<DigitsSym0, DigitsSym1, DigitsSyms...>{},
@@ -294,7 +294,6 @@ public:
   template <wchar_t Symbol>
   static constexpr bool is_valid_symbol =
       !std::is_same_v<value_for_symbol<Symbol>, utils::not_found_t>;
-  // TODO: Add proper check that symbol is valid
 
   template <wchar_t... Digits>
     requires((is_valid_symbol<Digits> && ...))

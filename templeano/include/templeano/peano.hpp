@@ -184,20 +184,5 @@ constexpr auto operator%(L l, Successor<RPred> r) {
 template <typename L, typename R>
 using mod_t = decltype(std::declval<L>() % std::declval<R>());
 
-/*
-                          Positional encoding
-*/
-
-// test invalid
-// helper::BinaryEncodingScheme::Encoding<One, detail::Two> testInvalid{};
-
-/*
-                                            Helper for decoder / encoder
-*/
-
-// Some tests
-
-namespace helper {} // namespace helper
-
 } // namespace templeano
 #endif // TEMPLEANO_TEMPLEANO_HPP
