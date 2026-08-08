@@ -286,10 +286,22 @@ public:
   static constexpr wchar_t symbol_for_value =
       mapping_holder.get_for_predicate(detail::GetOnValue<PI>{}).symbol;
 
+private:
+  template <wchar_t symbol, PeanoInteger PI>
+  PI static constexpr extract_value_from_type(
+      detail::DigitSymPair<symbol, PI>) {
+    return {};
+  }
+
+  static constexpr utils::not_found_t
+  extract_value_from_type(utils::not_found_t) {
+    return {};
+  }
+
+public:
   template <wchar_t Symbol>
-  using value_for_symbol = std::conditional_t<
-      std::is_same_v<value_pair_for_symbol<Symbol>, utils::not_found_t>,
-      utils::not_found_t, typename value_pair_for_symbol<Symbol>::Digit>;
+  using value_for_symbol = std::remove_cvref_t<decltype(extract_value_from_type(
+      value_pair_for_symbol<Symbol>{}))>;
 
   template <wchar_t Symbol>
   static constexpr bool is_valid_symbol =
