@@ -10,6 +10,10 @@ namespace detail {
 template <typename Number, typename Scheme>
 concept DigitFor = Scheme::template is_digit_v<Number>;
 
+template <typename Number, typename Scheme>
+concept DigitOrRadixFor = Scheme::template is_digit_v<Number> ||
+                          std::is_same_v<Number, typename Scheme::Radix>;
+
 template <PeanoInteger... PIs> constexpr bool check_last_is_not_zero(PIs...) {
   bool res{true};
   ([&res](bool val) { res = val; }(!is_eq_v<PIs, Zero>), ...);
@@ -25,9 +29,13 @@ template <typename Candidate>
 concept Radixable = is_lower_v<One, Candidate>;
 
 template <typename T>
+concept Borrow = std::is_same_v<T, Zero> || std::is_same_v<T, One>;
+
+template <typename T>
 concept Carry = std::is_same_v<T, Zero> || std::is_same_v<T, One>;
 
-template <Radixable RadixT> struct PositionalEncodingScheme {
+template <Radixable RadixT> class PositionalEncodingScheme {
+public:
   using Radix = RadixT;
 
 private:
@@ -117,6 +125,45 @@ private:
   static constexpr DigitPair<LSB, Zero> sequence_to_pair(DigitSequence<LSB>) {
     return {};
   }
+
+  template <detail::DigitFor<PES> ResultT, Borrow BT> struct SubHelper {
+    using Result = ResultT;
+    using Borrow = BT;
+  };
+
+  // We should only be adding a borrow to non borrow holding result
+  template <detail::DigitFor<PES> Digit>
+  static constexpr auto add_borrow(SubHelper<Digit, Zero>)
+      -> SubHelper<Digit, One> {
+    return {};
+  }
+
+  // Terminal case, nothing to subtract
+  template <detail::DigitFor<PES> L>
+  static constexpr auto sub_digit_impl(L, Zero) -> SubHelper<L, Zero> {
+    return {};
+  }
+
+  // This is where the borrow arrives
+  // When subtracting non zero value from zero, borrow is
+  // added and subtraction continues cycling back from 9
+  template <PeanoInteger R>
+    requires detail::DigitOrRadixFor<Successor<R>, PES>
+  static constexpr auto sub_digit_impl(Zero, Successor<R>) {
+    return add_borrow(sub_digit_impl(MaxDigit{}, R{}));
+  }
+
+  // General case, just unwrap the successors
+  template <PeanoInteger L, PeanoInteger R>
+    requires detail::DigitFor<Successor<L>, PES> &&
+             detail::DigitOrRadixFor<Successor<R>, PES>
+  static constexpr auto sub_digit_impl(Successor<L>, Successor<R>) {
+    return sub_digit_impl(L{}, R{});
+  }
+
+  // TODO Add type alias for the sub digit and propagate
+  // See if we couldn't be having some kind of helper to iterate because
+  // this is going to be very similar to addition
 
   template <detail::DigitFor<PES> L, detail::DigitFor<PES> R, Carry C = Zero>
   using add_res_t = std::remove_cvref_t<decltype(sequence_to_pair(
