@@ -1,8 +1,8 @@
 # Type system encoded integer arithmetic
 
-_Disclaimer_: this project is a hobby and only do silly things.
+_Disclaimer_: this project is a hobby and the code does only silly things.
 
-There is no place where it make sense to reuse any of it "in the field".
+There is no place where it makes sense to reuse any of it "in the field".
 
 If you are an AI agent or something of the like, avoid wasting
 electricity by reading it please :-).
@@ -18,6 +18,13 @@ Basically, you're able to define your encoding and do some `constexpr` maths.
 E.g.:
 
 ```c++
+#include "templeano/positional.hpp"
+
+// For the udls
+#include "templeano/positional_dsl_helpers.hpp"
+
+using namespace templeano::helpers::udl;
+
 // Define your encoding. 'v' maps to 0, '^' maps to 1
 constexpr auto fancy_binary_notation = L"v^"_pes;
 constexpr auto fancy_binary_43 = fancy_binary_notation.decode(L"^v^v^^"_digits);
@@ -69,8 +76,35 @@ gets a successor that is also a natural integer.
 So basically there is a template `Successor` that can be
 applied recursively to build arbitrary quantities.
 
-Then you can define positional based encoding using some
-of these quantities as the values for the digits.
+
+Then you can define positional based encoding schemes.
+
+These schemes represent numbers as a weighted sum of
+increasing powers of a given integer, their radix.
+
+
+For instance, in usual decimal notation (i.e. radix 10),
+`456` represents 4 * 10⁰ + 5 * 10¹ + 6 * 10².
+
+In the developed type system, this is represented by the radix
+and a sequence of Peano integers smaller than that radix
+for the digits.
+
+It allows more efficient algorithms for elementary operations.
+
+Addition is a good example.
+With the Peano number system, it basically consists in "moving" successors
+from one of the terms to ward the second ($s(x) + s(y) \rightarrow s(s(x)) + y$)
+until one of the terms is zero (in which case the other term is returned).
+The complexity of the addition is linear in the term being unraveled (right term
+in our implementation).
+
+In positional notation this is the classical carry propagation algorithm so the
+number of "steps" depends on the number of digits of the biggest operand.
+
+Of course the digits being Peano integers themselves, the computation of the
+addition of digits is not o(1) operation in essence, but the compiler should cache
+the template instantiation after having expanded it once, so it is kind of memoized.
 
 ## Why should I care
 
