@@ -56,6 +56,8 @@ void decimal_encoding_tests() {
 
   constexpr auto add_236_764 = d_236 + d_764;
   static_assert(add_236_764 == d_1000);
+  static_assert(d_0 + d_0 == d_0);
+  static_assert(d_999 + d_1 == d_1000);
   static_assert(d_1000 - d_764 == d_236);
   static_assert(d_1000 - d_236 == d_764);
   static_assert(d_764 - d_236 == decimal.decode(L"528"_digits));

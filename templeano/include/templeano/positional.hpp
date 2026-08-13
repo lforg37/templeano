@@ -36,6 +36,7 @@ concept Carry = std::is_same_v<T, Zero> || std::is_same_v<T, One>;
 
 namespace detail {
 template <PeanoInteger... PI> using DigitSequence = utils::Seq<PI...>;
+
 template <typename T>
 constexpr bool is_zero_seq_v =
     std::is_same_v<std::remove_cvref_t<T>, utils::Seq<Zero>>;
@@ -48,6 +49,10 @@ template <bool SelectFirst> constexpr auto select(auto first, auto second) {
   }
 }
 
+template <PeanoInteger... PIs>
+constexpr auto canonicalize_zero(DigitSequence<PIs...> seq) {
+  return detail::select<seq.is_empty>(DigitSequence<Zero>{}, seq);
+}
 } // namespace detail
 
 template <Radixable RadixT> class PositionalEncodingScheme {
@@ -135,6 +140,15 @@ private:
     using MSB = MSBT;
     static constexpr LSB lsb{};
     static constexpr MSB msb{};
+    static constexpr auto to_sequence() {
+      if constexpr (!std::is_same_v<Zero, MSB>) {
+        return DigitSequence<LSB, MSB>{};
+      } else if constexpr (!std::is_same_v<Zero, LSB>) {
+        return DigitSequence<LSB>{};
+      } else {
+        return DigitSequence<>{};
+      }
+    }
   };
 
   template <typename LSB, typename MSB>
@@ -185,48 +199,23 @@ private:
     return sub_digit_impl(L{}, R{});
   }
 
-  // TODO: We don't need the carry in all the template signature,
-  // can do better reuse
-
-  template <detail::DigitFor<PES> L, detail::DigitFor<PES> R, Carry C = Zero>
-  using add_res_t = std::remove_cvref_t<decltype(sequence_to_pair(
-      encode(add_res_unencoded_t<L, R, C>{})))>;
-
-  template <detail::DigitFor<PES> LLSD, detail::DigitFor<PES>... LDigits,
-            detail::DigitFor<PES> RLSD, detail::DigitFor<PES>... RDigits,
-            Carry C = Zero>
-  static constexpr auto add_impl(DigitSequence<LLSD, LDigits...>,
-                                 DigitSequence<RLSD, RDigits...>, C = {}) {
-    using DigitAddRes = add_res_t<LLSD, RLSD, C>;
-    return add_impl(DigitSequence<LDigits...>{}, DigitSequence<RDigits...>{},
-                    DigitAddRes::msb)
-        .prepend(DigitAddRes::lsb);
-  }
-
-  template <detail::DigitFor<PES> LLSD, detail::DigitFor<PES>... LDigits,
-            Carry C = Zero>
-  static constexpr auto add_impl(DigitSequence<LLSD, LDigits...>,
-                                 DigitSequence<>, C = {}) {
-    using DigitAddRes = add_res_t<LLSD, Zero, C>;
-    return add_impl(DigitSequence<LDigits...>{}, DigitSequence<>{},
-                    DigitAddRes::msb)
-        .prepend(DigitAddRes::lsb);
-  }
-
-  template <detail::DigitFor<PES> RLSD, detail::DigitFor<PES>... RDigits,
-            Carry C = Zero>
-  static constexpr auto add_impl(DigitSequence<>,
-                                 DigitSequence<RLSD, RDigits...>, C = {}) {
-    using DigitAddRes = add_res_t<Zero, RLSD, C>;
-    return add_impl(DigitSequence<>{}, DigitSequence<RDigits...>{},
-                    DigitAddRes::msb)
-        .prepend(DigitAddRes::lsb);
-  }
-
-  template <Carry C = Zero>
-  static constexpr auto add_impl(DigitSequence<>, DigitSequence<>, C = {}) {
-    return std::conditional_t<std::is_same_v<C, Zero>, DigitSequence<>,
-                              DigitSequence<One>>{};
+  template <typename LDigitSeq, typename RDigitSeq, Carry C = Zero>
+  static constexpr auto add_impl(LDigitSeq, RDigitSeq, C carry = {}) {
+    constexpr LDigitSeq lseq{};
+    constexpr RDigitSeq rseq{};
+    constexpr auto lsplit = utils::split_seq(lseq);
+    constexpr auto rsplit = utils::split_seq(rseq);
+    constexpr auto l_has_extra_digits = !lsplit.rest.is_empty;
+    constexpr auto r_has_extra_digits = !rsplit.rest.is_empty;
+    constexpr auto add_res =
+        sequence_to_pair(encode(lsplit.head + rsplit.head + carry));
+    if constexpr (l_has_extra_digits || r_has_extra_digits) {
+      constexpr auto next_l = detail::canonicalize_zero(lsplit.rest);
+      constexpr auto next_r = detail::canonicalize_zero(rsplit.rest);
+      return add_impl(next_l, next_r, add_res.msb).prepend(add_res.lsb);
+    } else {
+      return add_res.to_sequence();
+    }
   }
 
   template <typename T, template <typename> typename CRTP>
@@ -290,10 +279,8 @@ private:
     constexpr auto current_digit_res =
         sub_digit_impl(lsplit.head, rsplit.head + borrow);
     if constexpr (l_has_extra_digits || r_has_extra_digits) {
-      constexpr auto next_l = detail::select<lsplit.rest.is_empty>(
-          DigitSequence<Zero>{}, lsplit.rest);
-      constexpr auto next_r = detail::select<rsplit.rest.is_empty>(
-          DigitSequence<Zero>{}, rsplit.rest);
+      constexpr auto next_l = detail::canonicalize_zero(lsplit.rest);
+      constexpr auto next_r = detail::canonicalize_zero(rsplit.rest);
       return cmp_impl(next_l, next_r, current_digit_res.borrow)
           .extend_low_digit(current_digit_res.result);
     } else {
@@ -317,7 +304,8 @@ private:
 public:
   template <detail::DigitFor<PES>... LDigits, detail::DigitFor<PES>... RDigits>
   static constexpr auto add(Encoding<LDigits...> l, Encoding<RDigits...> r) {
-    return encoding_from(add_impl(l.sequence, r.sequence));
+    return encoding_from(
+        detail::canonicalize_zero(add_impl(l.sequence, r.sequence)));
   }
 
   template <detail::DigitFor<PES>... LDigits, detail::DigitFor<PES>... RDigits>
