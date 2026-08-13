@@ -114,6 +114,7 @@ template <typename T> constexpr T operator-(T, Zero) { return {}; }
 
 template <typename TL, typename TR>
 constexpr auto operator-(Successor<TL>, Successor<TR>) {
+  // TODO replace with concept for cleaner interface
   static_assert(is_leq_v<TR, TL>, "Invalid natural integer subtraction");
   return TL{} - TR{};
 }

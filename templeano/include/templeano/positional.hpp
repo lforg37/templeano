@@ -34,6 +34,22 @@ concept Borrow = std::is_same_v<T, Zero> || std::is_same_v<T, One>;
 template <typename T>
 concept Carry = std::is_same_v<T, Zero> || std::is_same_v<T, One>;
 
+namespace detail {
+template <PeanoInteger... PI> using DigitSequence = utils::Seq<PI...>;
+template <typename T>
+constexpr bool is_zero_seq_v =
+    std::is_same_v<std::remove_cvref_t<T>, utils::Seq<Zero>>;
+
+template <bool SelectFirst> constexpr auto select(auto first, auto second) {
+  if constexpr (SelectFirst) {
+    return first;
+  } else {
+    return second;
+  }
+}
+
+} // namespace detail
+
 template <Radixable RadixT> class PositionalEncodingScheme {
 public:
   using Radix = RadixT;
@@ -42,7 +58,13 @@ private:
   using MaxDigit = sub_t<Radix, One>;
   using PES = PositionalEncodingScheme;
   template <detail::DigitFor<PES>... Digits>
-  using DigitSequence = utils::Seq<Digits...>;
+  using DigitSequence = detail::DigitSequence<Digits...>;
+
+  template <typename T> struct IsDigitSequence : std::false_type {};
+  template <detail::DigitFor<PES>... Digits>
+  struct IsDigitSequence<DigitSequence<Digits...>> : std::true_type {};
+  template <typename T>
+  static constexpr bool is_digit_sequence_v = IsDigitSequence<T>::value;
   template <typename T> struct GetHeadHelper;
 
   template <typename... Digits> struct GetHeadHelper<DigitSequence<Digits...>> {
@@ -81,7 +103,7 @@ public:
   struct Encoding : public DigitSequence<LSD, Digits...> {
     using Scheme = PES;
     static_assert(detail::check_last_is_not_zero(Digits{}...));
-    constexpr DigitSequence<LSD, Digits...> sequence() { return {}; }
+    static constexpr DigitSequence<LSD, Digits...> sequence{};
   };
 
 private:
@@ -129,6 +151,8 @@ private:
   template <detail::DigitFor<PES> ResultT, Borrow BT> struct SubHelper {
     using Result = ResultT;
     using Borrow = BT;
+    static constexpr Borrow borrow{};
+    static constexpr ResultT result{};
   };
 
   // We should only be adding a borrow to non borrow holding result
@@ -161,9 +185,8 @@ private:
     return sub_digit_impl(L{}, R{});
   }
 
-  // TODO Add type alias for the sub digit and propagate
-  // See if we couldn't be having some kind of helper to iterate because
-  // this is going to be very similar to addition
+  // TODO: We don't need the carry in all the template signature,
+  // can do better reuse
 
   template <detail::DigitFor<PES> L, detail::DigitFor<PES> R, Carry C = Zero>
   using add_res_t = std::remove_cvref_t<decltype(sequence_to_pair(
@@ -206,10 +229,100 @@ private:
                               DigitSequence<One>>{};
   }
 
+  template <typename T, template <typename> typename CRTP>
+    requires is_digit_sequence_v<T>
+  struct CompareBase {
+    static constexpr T value{};
+    template <detail::DigitFor<PES> ToPrepend>
+    static constexpr auto extend_low_digit(ToPrepend to_prepend) {
+      if constexpr (detail::is_zero_seq_v<T>) {
+        // We can replace the zero MSB with current
+        return CRTP<DigitSequence<ToPrepend>>{};
+      } else {
+        return CRTP<typename T::template prepend_t<ToPrepend>>{};
+      }
+    }
+  };
+
+  template <typename T>
+    requires is_digit_sequence_v<T>
+  struct ComparesLess : public CompareBase<T, ComparesLess> {
+    static constexpr bool is_positive{false};
+  };
+
+  template <typename T>
+    requires is_digit_sequence_v<T>
+  struct ComparesGreaterEqual : public CompareBase<T, ComparesGreaterEqual> {
+    static constexpr bool is_positive{true};
+  };
+
+  template <detail::DigitFor<PES> Digit>
+  static constexpr auto init_negative_cmp(Digit)
+      -> ComparesLess<DigitSequence<Digit, MaxDigit>> {
+    return {};
+  }
+
+  template <detail::DigitFor<PES> Digit>
+  static constexpr auto init_positive_cmp(Digit)
+      -> ComparesGreaterEqual<DigitSequence<Digit>> {
+    return {};
+  }
+  // Subtraction: we have four cases:
+  // 1:  p0, s1, ... - <s0, ...> (- Borrow)?
+  //       This is just compute non terminal digit processing + borrow
+  //       propagation. Ensure we have at least always one zero digit on
+  //       subtracted value
+  // 2:  p0 - s0, s1, ...
+  //        Also propagate, ensure we propagate <Zero> for left term
+  // 3:  p0 - s0 => terminal case, we need to handle the possible carry
+  // forwarding
+
+  // Case 1: we have at least one extra
+  template <typename LDigitSeq, typename RDigitSeq, Borrow B>
+    requires is_digit_sequence_v<LDigitSeq> && is_digit_sequence_v<RDigitSeq>
+  static constexpr auto cmp_impl(LDigitSeq, RDigitSeq, B borrow) {
+    constexpr LDigitSeq lseq{};
+    constexpr RDigitSeq rseq{};
+    constexpr auto lsplit = utils::split_seq(lseq);
+    constexpr auto rsplit = utils::split_seq(rseq);
+    constexpr auto l_has_extra_digits = !lsplit.rest.is_empty;
+    constexpr auto r_has_extra_digits = !rsplit.rest.is_empty;
+    constexpr auto current_digit_res =
+        sub_digit_impl(lsplit.head, rsplit.head + borrow);
+    if constexpr (l_has_extra_digits || r_has_extra_digits) {
+      constexpr auto next_l = detail::select<lsplit.rest.is_empty>(
+          DigitSequence<Zero>{}, lsplit.rest);
+      constexpr auto next_r = detail::select<rsplit.rest.is_empty>(
+          DigitSequence<Zero>{}, rsplit.rest);
+      return cmp_impl(next_l, next_r, current_digit_res.borrow)
+          .extend_low_digit(current_digit_res.result);
+    } else {
+      // Here we have reached the end of both sequences
+      constexpr bool is_negative{current_digit_res.borrow == One{}};
+      if constexpr (is_negative) {
+        return init_negative_cmp(current_digit_res.result);
+      } else {
+        return init_positive_cmp(current_digit_res.result);
+      }
+    }
+  }
+
+  template <typename LSeq, typename RSeq>
+  static constexpr auto sub_impl(LSeq, RSeq) {
+    constexpr auto res = cmp_impl(LSeq{}, RSeq{}, Zero{});
+    static_assert(res.is_positive, "Result would be negative");
+    return encoding_from(res.value);
+  }
+
 public:
   template <detail::DigitFor<PES>... LDigits, detail::DigitFor<PES>... RDigits>
   static constexpr auto add(Encoding<LDigits...> l, Encoding<RDigits...> r) {
-    return encoding_from(add_impl(l.sequence(), r.sequence()));
+    return encoding_from(add_impl(l.sequence, r.sequence));
+  }
+
+  template <detail::DigitFor<PES>... LDigits, detail::DigitFor<PES>... RDigits>
+  static constexpr auto sub(Encoding<LDigits...> l, Encoding<RDigits...> r) {
+    return encoding_from(sub_impl(l.sequence, r.sequence));
   }
 };
 
@@ -247,6 +360,19 @@ template <PositionalEncodedNumber L,
 constexpr auto operator+(L l, R r) {
   using Scheme = typename L::Scheme;
   return Scheme::add(l, r);
+}
+
+template <PositionalEncodedNumber L,
+          PositionalEncodedNumberRadix<typename L::Scheme> R>
+constexpr auto operator-(L l, R r) {
+  using Scheme = typename L::Scheme;
+  return Scheme::sub(l, r);
+}
+
+template <PositionalEncodedNumber L,
+          PositionalEncodedNumberRadix<typename L::Scheme> R>
+constexpr bool operator==(L l, R r) {
+  return std::is_same_v<L, R>;
 }
 
 namespace detail {

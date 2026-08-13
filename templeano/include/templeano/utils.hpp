@@ -42,11 +42,12 @@ private:
   using Base = detail::SeqSpec<SeqTypes...>;
 
 public:
-  template <typename T>
-  static constexpr auto prepend(T) -> Seq<T, SeqTypes...> {
+  template <typename T> using prepend_t = Seq<T, SeqTypes...>;
+  template <typename T> static constexpr auto prepend(T) -> prepend_t<T> {
     return {};
   }
-  template <typename T> static constexpr auto append(T) -> Seq<SeqTypes..., T> {
+  template <typename T> using append_t = Seq<SeqTypes..., T>;
+  template <typename T> static constexpr auto append(T) -> append_t<T> {
     return {};
   }
   template <typename... OtherSeqT>
@@ -79,6 +80,18 @@ template <auto Head, auto... Values>
 constexpr bool all_distinct =
     detail::AllDistinctHelper<Head, Values...>::all_unique;
 
+template <typename HeadT, typename... SeqRest> struct SeqSplitter {
+  using Head = HeadT;
+  using Rest = Seq<SeqRest...>;
+  static constexpr Head head{};
+  static constexpr Rest rest{};
+};
+
+template <typename Head, typename... SeqRest>
+constexpr auto split_seq(Seq<Head, SeqRest...>)
+    -> SeqSplitter<Head, SeqRest...> {
+  return {};
+}
 } // namespace templeano::utils
 
 #endif // TEMPLEANO_UTILS_HPP

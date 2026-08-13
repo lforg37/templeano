@@ -24,4 +24,5 @@ register_test(ValueHelper test_value_helper.cpp)
 
 # Negative tests
 register_test(InvalidEncoderAlphabet negative_tests/test_invalid_duplicate_char_encoder_alphabet.cpp XFAIL)
+register_test(InvalidNegSub negative_tests/test_invalid_neg_sub.cpp XFAIL)
 register_test(InvalidSymDecode negative_tests/test_invalid_sym_decode.cpp XFAIL)

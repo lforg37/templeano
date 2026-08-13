@@ -56,3 +56,28 @@ static_assert(is_remcvref_same_v<decltype(classical_decimal_236),
 constexpr auto add_236_764 = classical_decimal_236 + classical_decimal_764;
 static_assert(is_remcvref_same_v<decltype(classical_decimal_1000),
                                  decltype(add_236_764)>);
+
+// TODO
+// constexpr auto sub_764_236 = classical_decimal_764 - classical_decimal_236;
+void check_ternary_subtraction() {
+  constexpr auto ternary = L"012"_pes;
+  constexpr auto zero = ternary.decode(L"0"_digits);
+  constexpr auto two = ternary.decode(L"2"_digits);
+  constexpr auto one = ternary.decode(L"1"_digits);
+  constexpr auto three = ternary.decode(L"10"_digits);
+  constexpr auto six = ternary.decode(L"20"_digits);
+  constexpr auto seven = ternary.decode(L"21"_digits);
+  constexpr auto nine = ternary.decode(L"100"_digits);
+  static_assert(zero - zero == zero);
+  static_assert(one - zero == one);
+  static_assert(two - zero == two);
+  static_assert(two - one == one);
+  static_assert(two - two == zero);
+  static_assert(three - zero == three);
+  static_assert(three - one == two);
+  static_assert(three - two == one);
+  static_assert(three - three == zero);
+  static_assert(six - three == three);
+  static_assert(nine - three == six);
+  static_assert(nine - two == seven);
+}
