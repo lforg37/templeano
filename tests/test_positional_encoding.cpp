@@ -42,23 +42,28 @@ static_assert(is_remcvref_same_v<decltype(fancy_binary_43),
                                  decltype(fancy_binary_notation.scheme.encode(
                                      helpers::PeanoEncoding<43>{}))>);
 
-constexpr auto classical_decimal_notation = L"0123456789"_pes;
-constexpr auto classical_decimal_236 =
-    classical_decimal_notation.decode(L"236"_digits);
-constexpr auto classical_decimal_764 =
-    classical_decimal_notation.decode(L"764"_digits);
-constexpr auto classical_decimal_1000 =
-    classical_decimal_notation.decode(L"1000"_digits);
-static_assert(is_remcvref_same_v<decltype(classical_decimal_236),
-                                 decltype(DecimalEncodingScheme::encode(
-                                     helpers::PeanoEncoding<236>{}))>);
+void decimal_encoding_tests() {
+  constexpr auto decimal = L"0123456789"_pes;
+  constexpr auto d_0 = decimal.decode(L"0"_digits);
+  constexpr auto d_1 = decimal.decode(L"1"_digits);
+  constexpr auto d_236 = decimal.decode(L"236"_digits);
+  constexpr auto d_764 = decimal.decode(L"764"_digits);
+  constexpr auto d_999 = decimal.decode(L"999"_digits);
+  constexpr auto d_1000 = decimal.decode(L"1000"_digits);
+  static_assert(is_remcvref_same_v<decltype(d_236),
+                                   decltype(DecimalEncodingScheme::encode(
+                                       helpers::PeanoEncoding<236>{}))>);
 
-constexpr auto add_236_764 = classical_decimal_236 + classical_decimal_764;
-static_assert(is_remcvref_same_v<decltype(classical_decimal_1000),
-                                 decltype(add_236_764)>);
+  constexpr auto add_236_764 = d_236 + d_764;
+  static_assert(add_236_764 == d_1000);
+  static_assert(d_1000 - d_764 == d_236);
+  static_assert(d_1000 - d_236 == d_764);
+  static_assert(d_764 - d_236 == decimal.decode(L"528"_digits));
+  static_assert(d_1000 - d_236 == d_764);
+  static_assert(d_1000 - d_0 == d_1000);
+  static_assert(d_1000 - d_1 == d_999);
+}
 
-// TODO
-// constexpr auto sub_764_236 = classical_decimal_764 - classical_decimal_236;
 void check_ternary_subtraction() {
   constexpr auto ternary = L"012"_pes;
   constexpr auto zero = ternary.decode(L"0"_digits);
