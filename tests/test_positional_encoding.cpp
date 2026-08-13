@@ -8,41 +8,46 @@ using namespace templeano;
 using test_common::utils::is_remcvref_same_v;
 using namespace helpers::udl;
 
-using BinaryEncodingScheme =
-    PositionalEncodingScheme<helpers::PeanoEncoding<2>>;
-using DecimalEncodingScheme =
-    PositionalEncodingScheme<helpers::PeanoEncoding<10>>;
+void check_direct_scheme_api() {
+  using BinaryEncodingScheme =
+      PositionalEncodingScheme<helpers::PeanoEncoding<2>>;
+  using DecimalEncodingScheme =
+      PositionalEncodingScheme<helpers::PeanoEncoding<10>>;
 
-// Declare a valid encoding
-BinaryEncodingScheme::Encoding<Zero, One> test{};
+  // Declare a valid encoding
+  BinaryEncodingScheme::Encoding<Zero, One> test{};
 
-constexpr auto decimal_42 =
-    DecimalEncodingScheme::encode(helpers::PeanoEncoding<42>{});
-constexpr auto decimal_8 =
-    DecimalEncodingScheme::encode(helpers::PeanoEncoding<8>{});
-static_assert(is_remcvref_same_v<
-              decltype(decimal_42),
-              DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<2>,
-                                              helpers::PeanoEncoding<4>>>);
-static_assert(is_remcvref_same_v<
-              decltype(decimal_8),
-              DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<8>>>);
-constexpr auto decimal_50 = decimal_42 + decimal_8;
-static_assert(is_remcvref_same_v<
-              decltype(decimal_50),
-              DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<0>,
-                                              helpers::PeanoEncoding<5>>>);
+  constexpr auto decimal_42 =
+      DecimalEncodingScheme::encode(helpers::PeanoEncoding<42>{});
+  constexpr auto decimal_8 =
+      DecimalEncodingScheme::encode(helpers::PeanoEncoding<8>{});
+  static_assert(is_remcvref_same_v<
+                decltype(decimal_42),
+                DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<2>,
+                                                helpers::PeanoEncoding<4>>>);
+  static_assert(is_remcvref_same_v<
+                decltype(decimal_8),
+                DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<8>>>);
+  constexpr auto decimal_50 = decimal_42 + decimal_8;
+  static_assert(is_remcvref_same_v<
+                decltype(decimal_50),
+                DecimalEncodingScheme::Encoding<helpers::PeanoEncoding<0>,
+                                                helpers::PeanoEncoding<5>>>);
 
-using TernaryEncoder = SymEncoder<'0', '1', '2'>;
-static_assert(TernaryEncoder::symbol_for_value<One> == '1');
-static_assert(std::is_same_v<TernaryEncoder::value_for_symbol<'0'>, Zero>);
-constexpr auto fancy_binary_notation = L"v^"_pes;
-constexpr auto fancy_binary_43 = fancy_binary_notation.decode(L"^v^v^^"_digits);
-static_assert(is_remcvref_same_v<decltype(fancy_binary_43),
-                                 decltype(fancy_binary_notation.scheme.encode(
-                                     helpers::PeanoEncoding<43>{}))>);
+  using TernaryEncoder = SymEncoder<'0', '1', '2'>;
+  static_assert(TernaryEncoder::symbol_for_value<One> == '1');
+  static_assert(std::is_same_v<TernaryEncoder::value_for_symbol<'0'>, Zero>);
+  constexpr auto fancy_binary_notation = L"v^"_pes;
+  constexpr auto fancy_binary_43 =
+      fancy_binary_notation.decode(L"^v^v^^"_digits);
+  static_assert(is_remcvref_same_v<decltype(fancy_binary_43),
+                                   decltype(fancy_binary_notation.scheme.encode(
+                                       helpers::PeanoEncoding<43>{}))>);
+}
 
 void decimal_encoding_tests() {
+  using DecimalEncodingScheme =
+      PositionalEncodingScheme<helpers::PeanoEncoding<10>>;
   constexpr auto decimal = L"0123456789"_pes;
   constexpr auto d_0 = decimal.decode(L"0"_digits);
   constexpr auto d_1 = decimal.decode(L"1"_digits);
@@ -87,4 +92,20 @@ void check_ternary_subtraction() {
   static_assert(six - three == three);
   static_assert(nine - three == six);
   static_assert(nine - two == seven);
+}
+
+void hexadecimal_big_nums_tests() {
+  constexpr auto hexadecimal = L"0123456789ABCDEF"_pes;
+  // 100 (in decimal) bits number
+  constexpr auto long_word_0 =
+      hexadecimal.decode(L"DEADBEEF01234CAFE89012345"_digits);
+  // 116 bits number
+  constexpr auto long_word_1 =
+      hexadecimal.decode(L"CCBDBEEFDE58BE702DAFE890BC486"_digits);
+  constexpr auto add_res = long_word_0 + long_word_1;
+  constexpr auto sub_res = long_word_1 - long_word_0;
+  static_assert(sub_res ==
+                hexadecimal.decode(L"CCBCE0421F69BD4CE1000000AA141"_digits));
+  static_assert(add_res ==
+                hexadecimal.decode(L"CCBE9D9D9D47BF937A5FD120CE7CB"_digits));
 }
