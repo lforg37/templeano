@@ -397,9 +397,9 @@ template <PeanoInteger PI> struct GetOnValue {
 };
 
 template <wchar_t Sym> struct GetOnSym {
-  template <typename Candidate> struct CheckFor {
-    static constexpr bool value = Candidate::symbol == Sym;
-  };
+  template <typename Candidate> struct CheckFor : std::false_type {};
+  template <PeanoInteger PI>
+  struct CheckFor<DigitSymPair<Sym, PI>> : std::true_type {};
 };
 } // namespace detail
 
@@ -440,12 +440,13 @@ private:
 
   template <wchar_t Symbol>
   using value_pair_for_symbol =
-      HolderType::template get_type_with_property<detail::GetOnSym<Symbol>>;
+      utils::find_type_with_property_t<detail::GetOnSym<Symbol>, HolderType>;
 
 public:
   template <PeanoInteger PI>
   static constexpr wchar_t symbol_for_value =
-      mapping_holder.get_for_predicate(detail::GetOnValue<PI>{}).symbol;
+      utils::find_type_with_property(mapping_holder, detail::GetOnValue<PI>{})
+          .symbol;
 
 private:
   template <wchar_t symbol, PeanoInteger PI>
