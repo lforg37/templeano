@@ -184,18 +184,23 @@ constexpr auto rfill_to_match(SourceSeq source, ReferenceSeq reference) {
   }
 }
 
-template <typename WrappedT, SeqType ResT> struct AccumulationWrapper {
+// TODO: add proper constraint on combinator
+template <typename WrappedT, SeqType ResT, typename SeqCombinator>
+struct AccumulationWrapper {
   using wrapped_t = WrappedT;
   using res_t = ResT;
+  using seq_combinator_t = SeqCombinator;
   static constexpr wrapped_t wrapped{};
   static constexpr res_t result{};
+  static constexpr seq_combinator_t combinator{};
 };
 
 namespace detail {
 template <typename T> constexpr bool is_accumulation_wrapper{false};
 
-template <typename WT, SeqType ST>
-constexpr bool is_accumulation_wrapper<AccumulationWrapper<WT, ST>>{true};
+template <typename WT, SeqType ST, typename SeqCombinator>
+constexpr bool
+    is_accumulation_wrapper<AccumulationWrapper<WT, ST, SeqCombinator>>{true};
 } // namespace detail
 
 template <typename T>
@@ -225,8 +230,9 @@ constexpr auto wrap_res_next(Res, Next) -> detail::ResHolder<Res, Next> {
   return {};
 }
 
-template <typename T, SeqType ST = Seq<>>
-constexpr auto wrap_in_accumulator(T, ST = {}) -> AccumulationWrapper<T, ST> {
+template <typename T, typename Combinator, SeqType ST = Seq<>>
+constexpr auto wrap_in_accumulator(T, Combinator, ST = {})
+    -> AccumulationWrapper<T, ST, Combinator> {
   return {};
 }
 
@@ -235,9 +241,21 @@ template <AccumulationWrapperType Left, typename Right>
 constexpr auto operator+(Left, Right) {
   constexpr auto add_res = Left::wrapped + Right{};
   constexpr auto seq_res =
-      Left::result.concat(Seq<typename decltype(add_res)::res_t>{});
-  return wrap_in_accumulator(add_res.next, seq_res);
+      Left::combinator.combine(Left::result, add_res.result);
+  return wrap_in_accumulator(add_res.next, Left::combinator, seq_res);
 }
+
+namespace combinator {
+struct Append {
+  template <SeqType Left, typename Right>
+  static constexpr auto combine(Left l, Right) {
+    return l.concat(Seq<Right>{});
+  }
+};
+
+constexpr Append append{};
+} // namespace combinator
+
 } // namespace templeano::utils
 
 #endif // TEMPLEANO_UTILS_HPP

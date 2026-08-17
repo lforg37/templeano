@@ -26,7 +26,8 @@ template <PeanoInteger PI> struct MyHolder {
 } // namespace
 
 void check_accumulator() {
-  constexpr auto wrapper = utils::wrap_in_accumulator(MyHolder<Zero>{});
+  constexpr auto wrapper =
+      utils::wrap_in_accumulator(MyHolder<Zero>{}, utils::combinator::append);
   constexpr auto res = wrapper + Successor<One>{};
   static_assert(
       std::is_same_v<std::remove_const_t<decltype(res.result)>, Seq<Zero>>);

@@ -208,17 +208,17 @@ private:
 
   template <Carry CarryIn> struct AddAccumulator {
     static constexpr CarryIn carry{};
-    template <PeanoInteger LSB, Carry OtherCarry>
-    constexpr auto operator+(DigitPair<LSB, OtherCarry>) const {
+    template <PeanoInteger ResDigit, Carry OtherCarry>
+    constexpr auto operator+(DigitPair<ResDigit, OtherCarry>) const {
       if constexpr (CarryIn{} == zero) {
-        return utils::wrap_res_next(LSB{}, AddAccumulator<OtherCarry>{});
+        return utils::wrap_res_next(ResDigit{}, AddAccumulator<OtherCarry>{});
       } else {
-        if constexpr (std::is_same_v<LSB, MaxDigit>) {
+        if constexpr (std::is_same_v<ResDigit, MaxDigit>) {
           static_assert(std::is_same_v<OtherCarry, Zero>,
                         "There shouldn't be more than one carry propagating");
           return utils::wrap_res_next(zero, AddAccumulator<One>{});
         } else {
-          return utils::wrap_res_next(Successor<LSB>{},
+          return utils::wrap_res_next(Successor<ResDigit>{},
                                       AddAccumulator<OtherCarry>{});
         }
       }
@@ -233,8 +233,10 @@ private:
   static constexpr auto add_impl_aligned(DigitSequence<LDigits...> l,
                                          DigitSequence<RDigits...> r) {
     constexpr AddAccumulator<Zero> accumulator_init{};
-    constexpr auto accumulated = (utils::wrap_in_accumulator(accumulator_init) +
-                                  ... + add_encoded_v<LDigits, RDigits>);
+    constexpr auto accumulated =
+        (utils::wrap_in_accumulator(accumulator_init,
+                                    utils::combinator::append) +
+         ... + add_encoded_v<LDigits, RDigits>);
     if constexpr (accumulated.wrapped.carry == zero) {
       return accumulated.result;
     } else {
@@ -279,15 +281,15 @@ private:
     static constexpr bool is_positive{true};
   };
 
-  template <detail::DigitFor<PES> Digit>
-  static constexpr auto init_negative_cmp(Digit)
-      -> ComparesLess<DigitSequence<Digit, MaxDigit>> {
+  template <detail::DigitFor<PES>... Digits>
+  static constexpr auto negative_cmp(DigitSequence<Digits...>)
+      -> ComparesLess<DigitSequence<Digits..., MaxDigit>> {
     return {};
   }
 
-  template <detail::DigitFor<PES> Digit>
-  static constexpr auto init_positive_cmp(Digit)
-      -> ComparesGreaterEqual<DigitSequence<Digit>> {
+  template <detail::DigitFor<PES>... Digits>
+  static constexpr auto positive_cmp(DigitSequence<Digits...>)
+      -> ComparesGreaterEqual<DigitSequence<Digits...>> {
     return {};
   }
   // Subtraction: we have four cases:
@@ -300,32 +302,77 @@ private:
   // 3:  p0 - s0 => terminal case, we need to handle the possible carry
   // forwarding
 
+  template <Borrow BorrowIn, bool IsZero> struct CmpAccumulator {
+    static constexpr BorrowIn borrow{};
+    static constexpr bool is_zero{IsZero};
+    template <PeanoInteger ResDigit, Borrow OtherBorrow>
+    constexpr auto operator+(SubHelper<ResDigit, OtherBorrow>) const {
+      if constexpr (BorrowIn{} == zero) {
+        return utils::wrap_res_next(ResDigit{}, CmpAccumulator < OtherBorrow,
+                                    (ResDigit{} == zero) && is_zero > {});
+      } else {
+        if constexpr (std::is_same_v<ResDigit, Zero>) {
+          static_assert(std::is_same_v<OtherBorrow, Zero>,
+                        "There shouldn't be more than one borrow propagating");
+          return utils::wrap_res_next(zero, CmpAccumulator<One, false>{});
+        } else {
+          return utils::wrap_res_next(ResDigit{} - one,
+                                      CmpAccumulator<OtherBorrow, false>{});
+        }
+      }
+    }
+  };
+
+  template <PeanoInteger... LDigits, PeanoInteger... RDigits>
+  static constexpr auto cmp_impl_aligned(DigitSequence<LDigits...>,
+                                         DigitSequence<RDigits...>) {
+    constexpr CmpAccumulator<Zero, true> accumulator_init{};
+    constexpr auto accumulated =
+        (utils::wrap_in_accumulator(accumulator_init,
+                                    utils::combinator::append) +
+         ... + sub_digit_impl(LDigits{}, RDigits{}));
+    if constexpr (accumulated.wrapped.borrow == zero) {
+      if constexpr (accumulated.wrapped.is_zero) {
+        return positive_cmp(DigitSequence<Zero>{});
+      } else {
+        return positive_cmp(accumulated.result);
+      }
+    } else {
+      return negative_cmp(accumulated.result);
+    }
+  }
+
   // Case 1: we have at least one extra
   template <typename LDigitSeq, typename RDigitSeq, Borrow B>
     requires is_digit_sequence_v<LDigitSeq> && is_digit_sequence_v<RDigitSeq>
   static constexpr auto cmp_impl(LDigitSeq, RDigitSeq, B borrow) {
-    constexpr LDigitSeq lseq{};
-    constexpr RDigitSeq rseq{};
-    constexpr auto lsplit = utils::split_seq(lseq);
-    constexpr auto rsplit = utils::split_seq(rseq);
-    constexpr auto l_has_extra_digits = !lsplit.rest.is_empty;
-    constexpr auto r_has_extra_digits = !rsplit.rest.is_empty;
-    constexpr auto current_digit_res =
-        sub_digit_impl(lsplit.head, rsplit.head + borrow);
-    if constexpr (l_has_extra_digits || r_has_extra_digits) {
-      constexpr auto next_l = detail::canonicalize_zero(lsplit.rest);
-      constexpr auto next_r = detail::canonicalize_zero(rsplit.rest);
-      return cmp_impl(next_l, next_r, current_digit_res.borrow)
-          .extend_low_digit(current_digit_res.result);
-    } else {
-      // Here we have reached the end of both sequences
-      constexpr bool is_negative{current_digit_res.borrow == One{}};
-      if constexpr (is_negative) {
-        return init_negative_cmp(current_digit_res.result);
-      } else {
-        return init_positive_cmp(current_digit_res.result);
-      }
-    }
+    constexpr auto l_aligned =
+        utils::rfill_to_match<Zero>(LDigitSeq{}, RDigitSeq{});
+    constexpr auto r_aligned =
+        utils::rfill_to_match<Zero>(RDigitSeq{}, LDigitSeq{});
+    return cmp_impl_aligned(l_aligned, r_aligned);
+    // constexpr LDigitSeq lseq{};
+    // constexpr RDigitSeq rseq{};
+    // constexpr auto lsplit = utils::split_seq(lseq);
+    // constexpr auto rsplit = utils::split_seq(rseq);
+    // constexpr auto l_has_extra_digits = !lsplit.rest.is_empty;
+    // constexpr auto r_has_extra_digits = !rsplit.rest.is_empty;
+    // constexpr auto current_digit_res =
+    //     sub_digit_impl(lsplit.head, rsplit.head + borrow);
+    // if constexpr (l_has_extra_digits || r_has_extra_digits) {
+    //   constexpr auto next_l = detail::canonicalize_zero(lsplit.rest);
+    //   constexpr auto next_r = detail::canonicalize_zero(rsplit.rest);
+    //   return cmp_impl(next_l, next_r, current_digit_res.borrow)
+    //       .extend_low_digit(current_digit_res.result);
+    // } else {
+    //   // Here we have reached the end of both sequences
+    //   constexpr bool is_negative{current_digit_res.borrow == One{}};
+    //   if constexpr (is_negative) {
+    //     return init_negative_cmp(current_digit_res.result);
+    //   } else {
+    //     return init_positive_cmp(current_digit_res.result);
+    //   }
+    // }
   }
 
   template <typename LSeq, typename RSeq>
