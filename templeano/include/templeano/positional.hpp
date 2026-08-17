@@ -92,6 +92,18 @@ private:
     }
   }
 
+  static constexpr auto apply_successor_n_times(Zero, auto digit_sequence)
+    requires is_digit_sequence_v<decltype(digit_sequence)>
+  {
+    return digit_sequence;
+  }
+
+  template <PeanoInteger PI>
+  static constexpr auto apply_successor_n_times(Successor<PI>,
+                                                auto digit_sequence) {
+    return successor(apply_successor_n_times(PI{}, digit_sequence));
+  }
+
   static constexpr auto encode_impl(Zero, auto DigitSequence) {
     return DigitSequence;
   }
@@ -129,11 +141,6 @@ public:
   static constexpr bool is_encoding_v<Encoding<Digits...>>{true};
 
 private:
-  template <detail::DigitFor<PES> L, detail::DigitFor<PES> R, Carry C = Zero>
-  using add_res_unencoded_t =
-      std::conditional_t<std::is_same_v<C, Zero>, add_t<L, R>,
-                         Successor<add_t<L, R>>>;
-
   template <detail::DigitFor<PES> LSBT, detail::DigitFor<PES> MSBT>
   struct DigitPair {
     using LSB = LSBT;
@@ -199,23 +206,50 @@ private:
     return sub_digit_impl(L{}, R{});
   }
 
+  template <Carry CarryIn> struct AddAccumulator {
+    static constexpr CarryIn carry{};
+    template <PeanoInteger LSB, Carry OtherCarry>
+    constexpr auto operator+(DigitPair<LSB, OtherCarry>) const {
+      if constexpr (CarryIn{} == zero) {
+        return utils::wrap_res_next(LSB{}, AddAccumulator<OtherCarry>{});
+      } else {
+        if constexpr (std::is_same_v<LSB, MaxDigit>) {
+          static_assert(std::is_same_v<OtherCarry, Zero>,
+                        "There shouldn't be more than one carry propagating");
+          return utils::wrap_res_next(zero, AddAccumulator<One>{});
+        } else {
+          return utils::wrap_res_next(Successor<LSB>{},
+                                      AddAccumulator<OtherCarry>{});
+        }
+      }
+    }
+  };
+
+  template <PeanoInteger L, PeanoInteger R>
+  static constexpr auto add_encoded_v =
+      sequence_to_pair(apply_successor_n_times(L{}, DigitSequence<R>{}));
+
+  template <PeanoInteger... LDigits, PeanoInteger... RDigits>
+  static constexpr auto add_impl_aligned(DigitSequence<LDigits...> l,
+                                         DigitSequence<RDigits...> r) {
+    constexpr AddAccumulator<Zero> accumulator_init{};
+    constexpr auto accumulated = (utils::wrap_in_accumulator(accumulator_init) +
+                                  ... + add_encoded_v<LDigits, RDigits>);
+    if constexpr (accumulated.wrapped.carry == zero) {
+      return accumulated.result;
+    } else {
+      static_assert(accumulated.wrapped.carry == one);
+      return accumulated.result.concat(DigitSequence<One>{});
+    }
+  }
+
   template <typename LDigitSeq, typename RDigitSeq, Carry C = Zero>
   static constexpr auto add_impl(LDigitSeq, RDigitSeq, C carry = {}) {
-    constexpr LDigitSeq lseq{};
-    constexpr RDigitSeq rseq{};
-    constexpr auto lsplit = utils::split_seq(lseq);
-    constexpr auto rsplit = utils::split_seq(rseq);
-    constexpr auto l_has_extra_digits = !lsplit.rest.is_empty;
-    constexpr auto r_has_extra_digits = !rsplit.rest.is_empty;
-    constexpr auto add_res =
-        sequence_to_pair(encode(lsplit.head + rsplit.head + carry));
-    if constexpr (l_has_extra_digits || r_has_extra_digits) {
-      constexpr auto next_l = detail::canonicalize_zero(lsplit.rest);
-      constexpr auto next_r = detail::canonicalize_zero(rsplit.rest);
-      return add_impl(next_l, next_r, add_res.msb).prepend(add_res.lsb);
-    } else {
-      return add_res.to_sequence();
-    }
+    constexpr auto l_aligned =
+        utils::rfill_to_match<Zero>(LDigitSeq{}, RDigitSeq{});
+    constexpr auto r_aligned =
+        utils::rfill_to_match<Zero>(RDigitSeq{}, LDigitSeq{});
+    return add_impl_aligned(l_aligned, r_aligned);
   }
 
   template <typename T, template <typename> typename CRTP>

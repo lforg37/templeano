@@ -1,5 +1,6 @@
 #ifndef TEMPLEANO_UTILS_HPP
 #define TEMPLEANO_UTILS_HPP
+#include <concepts>
 #include <type_traits>
 
 namespace templeano::utils {
@@ -73,6 +74,54 @@ public:
 };
 
 namespace detail {
+
+template <typename Src, typename Dest> using mapper_t = Dest;
+
+template <typename ReplaceWith, typename... SeqTypes>
+constexpr auto replace_types_with(Seq<SeqTypes...>)
+    -> Seq<mapper_t<SeqTypes, ReplaceWith>...> {
+  return {};
+}
+
+// For some operations on sequence only the number of element is important.
+// In that case the canonical equivalence class representant will only
+// contain Filler.
+struct Filler {};
+
+template <typename... Pack> constexpr auto canonicalize(Seq<Pack...> seq) {
+  return replace_types_with<Filler>(seq);
+}
+
+template <typename PrefixSeq, typename SuffixSeq>
+struct SeqParts : std::true_type {
+  using Prefix = PrefixSeq;
+  using Suffix = SuffixSeq;
+  static constexpr Prefix prefix{};
+  static constexpr Suffix suffix{};
+};
+
+struct InvalidSplit : std::false_type {};
+template <typename... OutPack> struct PrefixSplitter {
+  template <typename... InnerPack>
+  static constexpr auto split(Seq<OutPack..., InnerPack...>)
+      -> SeqParts<Seq<OutPack...>, Seq<InnerPack...>> {
+    return {};
+  }
+  template <typename... Pack>
+  static constexpr auto split(Seq<Pack...>) -> InvalidSplit {
+    return {};
+  }
+};
+
+template <template <typename...> typename Mapping, typename... Pack>
+constexpr auto reuse_pack_in(Seq<Pack...>) -> Mapping<Pack...> {
+  return {};
+}
+
+constexpr auto get_prefix_splitter(auto seq) {
+  return reuse_pack_in<PrefixSplitter>(seq);
+}
+
 template <auto... Values> struct AllDistinctHelper;
 
 template <auto T> struct AllDistinctHelper<T> {
@@ -86,6 +135,12 @@ struct AllDistinctHelper<HeadVal, Values...> {
       is_head_unique && AllDistinctHelper<Values...>::all_unique;
 };
 } // namespace detail
+
+template <typename T> constexpr bool is_seq_v{false};
+template <typename... SeqTypes> constexpr bool is_seq_v<Seq<SeqTypes...>>{true};
+
+template <typename T>
+concept SeqType = is_seq_v<T>;
 
 template <auto Head, auto... Values>
 constexpr bool all_distinct =
@@ -111,9 +166,78 @@ constexpr auto find_type_with_property(Seq<SeqTypes...> seq, Predicate) ->
   return {};
 }
 
-template <detail::TypePredicate Predicate, typename Seq>
+template <detail::TypePredicate Predicate, SeqType Seq>
 using find_type_with_property_t =
     std::remove_cvref_t<decltype(find_type_with_property(Seq{}, Predicate{}))>;
+
+template <typename FillWith, SeqType SourceSeq, SeqType ReferenceSeq>
+constexpr auto rfill_to_match(SourceSeq source, ReferenceSeq reference) {
+  constexpr auto canonicalized_source = detail::canonicalize(SourceSeq{});
+  constexpr auto canonicalized_ref = detail::canonicalize(ReferenceSeq{});
+  constexpr auto split =
+      get_prefix_splitter(canonicalized_source).split(canonicalized_ref);
+  if constexpr (std::is_same_v<std::remove_const_t<decltype(split)>,
+                               detail::InvalidSplit>) {
+    return source;
+  } else {
+    return source.concat(detail::replace_types_with<FillWith>(split.suffix));
+  }
+}
+
+template <typename WrappedT, SeqType ResT> struct AccumulationWrapper {
+  using wrapped_t = WrappedT;
+  using res_t = ResT;
+  static constexpr wrapped_t wrapped{};
+  static constexpr res_t result{};
+};
+
+namespace detail {
+template <typename T> constexpr bool is_accumulation_wrapper{false};
+
+template <typename WT, SeqType ST>
+constexpr bool is_accumulation_wrapper<AccumulationWrapper<WT, ST>>{true};
+} // namespace detail
+
+template <typename T>
+concept AccumulationWrapperType = detail::is_accumulation_wrapper<T>;
+
+template <typename T>
+concept ResultHolder = requires {
+  typename T::res_t;
+  typename T::next_t;
+  requires std::same_as<std::remove_const_t<decltype(T::result)>,
+                        typename T::res_t>;
+  requires std::same_as<std::remove_const_t<decltype(T::next)>,
+                        typename T::next_t>;
+};
+
+namespace detail {
+template <typename Res, typename Next> struct ResHolder {
+  using res_t = Res;
+  using next_t = Next;
+  static constexpr res_t result{};
+  static constexpr next_t next{};
+};
+} // namespace detail
+
+template <std::default_initializable Res, std::default_initializable Next>
+constexpr auto wrap_res_next(Res, Next) -> detail::ResHolder<Res, Next> {
+  return {};
+}
+
+template <typename T, SeqType ST = Seq<>>
+constexpr auto wrap_in_accumulator(T, ST = {}) -> AccumulationWrapper<T, ST> {
+  return {};
+}
+
+template <AccumulationWrapperType Left, typename Right>
+  requires ResultHolder<decltype(Left::wrapped + std::declval<Right>())>
+constexpr auto operator+(Left, Right) {
+  constexpr auto add_res = Left::wrapped + Right{};
+  constexpr auto seq_res =
+      Left::result.concat(Seq<typename decltype(add_res)::res_t>{});
+  return wrap_in_accumulator(add_res.next, seq_res);
+}
 } // namespace templeano::utils
 
 #endif // TEMPLEANO_UTILS_HPP

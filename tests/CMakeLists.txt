@@ -43,6 +43,7 @@ endfunction()
 register_test(PeanoBasicOps test_peano_basic_arith_ops.cpp)
 register_test(PeanoPrimeFacto test_peano_prime_fact.cpp)
 register_test(PositionalEncoding test_positional_encoding.cpp)
+register_test(Utils test_utils.cpp)
 register_test(ValueHelper test_value_helper.cpp)
 
 # Negative tests
